@@ -10,6 +10,18 @@ use Twilio\Rest\Client;
 use Twilio\TwiML\TwiML;
 use Twilio\TwiML\VoiceResponse;
 
+/**
+ * @method static void assertCallSent(string $number)
+ * @method static void assertMessageSent(string $number)
+ * @method static void assertCallNotSent(string $number)
+ * @method static void assertMessageNotSent(string $number)
+ * @method static void assertNothingSent()
+ * @method static void assertNoMessagesSent()
+ * @method static void assertNoCallsSent()
+ *
+ *
+ * @see \Aloha\Twilio\Support\FakeFacade
+ */
 class Twilio implements TwilioInterface
 {
     /**
@@ -38,6 +50,11 @@ class Twilio implements TwilioInterface
     protected $twilio;
 
     /**
+     * @var Manager
+     */
+    protected $manager;
+
+    /**
      * @param string $token
      * @param string $from
      * @param string $sid
@@ -49,6 +66,8 @@ class Twilio implements TwilioInterface
         $this->token = $token;
         $this->from = $from;
         $this->sslVerify = $sslVerify;
+
+        $this->manager = app()->get('twilio');;
     }
 
     /**
@@ -120,7 +139,7 @@ class Twilio implements TwilioInterface
             return $this->twilio;
         }
 
-        return $this->twilio = new Client($this->sid, $this->token);
+        return $this->twilio = $this->manager->client();
     }
 
     /**

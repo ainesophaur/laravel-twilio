@@ -3,8 +3,10 @@
 namespace Aloha\Twilio;
 
 use InvalidArgumentException;
+use Twilio\Exceptions\ConfigurationException;
 use Twilio\Rest\Api\V2010\Account\CallInstance;
 use Twilio\Rest\Api\V2010\Account\MessageInstance;
+use Twilio\Rest\Client;
 use Twilio\TwiML\TwiML;
 
 class Manager implements TwilioInterface
@@ -87,5 +89,23 @@ class Manager implements TwilioInterface
     public function defaultConnection(): TwilioInterface
     {
         return $this->from($this->default);
+    }
+
+    /**
+     * @throws ConfigurationException
+     */
+    public function client(?string $connection = null): Client
+    {
+        if($connection === null) {
+            $connection = $this->default;
+        }
+
+        if (!isset($this->settings[$connection])) {
+            throw new InvalidArgumentException("Connection \"{$connection}\" is not configured.");
+        }
+
+        $settings = $this->settings[$connection];
+
+        return new Client($settings['sid'], $settings['token']);
     }
 }

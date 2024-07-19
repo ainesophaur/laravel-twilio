@@ -15,34 +15,14 @@ use Aloha\Twilio\TwilioInterface;
 use Aloha\Twilio\Manager as Twilio;
 use Illuminate\Support\Arr;
 use PHPUnit\Framework\Assert;
+use Illuminate\Support\Testing\Fakes\Fake;
+use Illuminate\Support\Traits\ForwardsCalls;
 
-class FakeFacade implements TwilioInterface
+class FakeFacade implements TwilioInterface, Fake
 {
-	/**
-	 * @var string
-	 */
-	protected $sid;
 
-	/**
-	 * @var string
-	 */
-	protected $token;
+    use ForwardsCalls;
 
-	/**
-	 * @var string
-	 */
-	protected $from;
-
-	/**
-	 * @var bool
-	 */
-	protected $sslVerify;
-
-	/**
-	 * @var Client
-	 */
-	protected $twilio;
-	
 	protected $history;
 	
 	protected $settings = [
@@ -52,8 +32,12 @@ class FakeFacade implements TwilioInterface
 			'from' => '+18005551234',
 		]
 	];
+    /**
+     * @var Twilio
+     */
+    protected $instance;
 
-	/**
+    /**
 	 * @param string $token
 	 * @param string $from
 	 * @param string $sid
@@ -66,15 +50,6 @@ class FakeFacade implements TwilioInterface
 		$this->history = collect([]);
 	}
 	
-	public function instance(string $sid, string $token, string $from, bool $sslVerify = true)
-	{
-		$this->sid = $sid;
-		$this->token = $token;
-		$this->from = $from;
-		$this->sslVerify = $sslVerify;
-		
-		return $this;
-	}
 
 	/**
 	 * @param string $to
@@ -92,16 +67,16 @@ class FakeFacade implements TwilioInterface
 	public function message(string $to, string $message, array $mediaUrls = [], array $params = []): MessageInstance
 	{
 		$params['body'] = $message;
-
-		if (!isset($params['from'])) {
-			$params['from'] = $this->from;
+        $from = $params['from'] ?? null;
+		if (!isset($from) || empty($from)) {
+			$params['from'] = $this->settings['default']['from'];
 		}
 
 		if (!empty($mediaUrls)) {
 			$params['mediaUrl'] = $mediaUrls;
 		}
 		
-		$this->history["sms_$to"] = new MessageInstance(new V2010(new Api(new Client('nonsense', 'nonsense'))), [], '');
+		$this->history["sms_$to"] = new MessageInstance(new V2010(new Api(new Client('nonsense', 'nonsense'))), $params, '');
 		
 		return $this->history["sms_$to"];
 	}
@@ -129,39 +104,51 @@ class FakeFacade implements TwilioInterface
 			$params['url'] = $message;
 		}
 
-		$this->history["call_$to"] = new CallInstance(new V2010(new Api(new Client('nonsense', 'nonsense'))), [], '');
+		$this->history["call_$to"] = new CallInstance(new V2010(new Api(new Client('nonsense', 'nonsense'))), $params, '');
 		
 		return $this->history["call_$to"];
 	}
 
-	/**
-	 * @throws ConfigurationException
-	 *
-	 * @return Client
-	 */
-	public function getTwilio(): Client
-	{
-		if ($this->twilio) {
-			return $this->twilio;
-		}
 
-		return $this->twilio = new Client($this->sid, $this->token);
-	}
-
-	/**
-	 * @param callable $callback
-	 *
-	 * @return TwiML
-	 */
-	private function twiml(callable $callback): TwiML
-	{
-		$message = new VoiceResponse();
-
-		call_user_func($callback, $message);
-
-		return $message;
-	}
-	
+    /**
+     * Handle dynamic method calls to the legacy manager.
+     *
+     * @param  string  $method
+     * @param  array<array-key, mixed>  $parameters
+     */
+    public function __call($method, $parameters): mixed
+    {
+        return $this->forwardCallTo($this->instance, $method, $parameters);
+    }
+//
+//	/**
+//	 * @throws ConfigurationException
+//	 *
+//	 * @return Client
+//	 */
+//	public function getTwilio(): Client
+//	{
+//		if ($this->twilio) {
+//			return $this->twilio;
+//		}
+//
+//		return $this->twilio = new Client($this->sid, $this->token);
+//	}
+//
+//	/**
+//	 * @param callable $callback
+//	 *
+//	 * @return TwiML
+//	 */
+//	private function twiml(callable $callback): TwiML
+//	{
+//		$message = new VoiceResponse();
+//
+//		call_user_func($callback, $message);
+//
+//		return $message;
+//	}
+//
 	/**
 	 * @return TwilioInterface
 	 */
@@ -169,30 +156,58 @@ class FakeFacade implements TwilioInterface
 	{
 		return $this->from('default');
 	}
+//
+//	/**
+//	 * @param string $connection
+//	 *
+//	 * @return TwilioInterface
+//	 */
+//	public function from(string $connection): TwilioInterface
+//	{
+//		if (!isset($this->settings[$connection])) {
+//			throw new InvalidArgumentException("Connection \"{$connection}\" is not configured.");
+//		}
+//
+//		$settings = $this->settings[$connection];
+//
+//		return $this->instance($settings['sid'], $settings['token'], $settings['from']);
+//	}
 	
-	/**
-	 * @param string $connection
-	 *
-	 * @return TwilioInterface
-	 */
-	public function from(string $connection): TwilioInterface
+	public function assertMessageSent(string $to): void
 	{
-		if (!isset($this->settings[$connection])) {
-			throw new InvalidArgumentException("Connection \"{$connection}\" is not configured.");
-		}
-	
-		$settings = $this->settings[$connection];
-	
-		return $this->instance($settings['sid'], $settings['token'], $settings['from']);
+		Assert::assertInstanceOf(MessageInstance::class, $this->history->get("sms_$to"));
 	}
 	
-	public function assertMessageSent(string $to)
+	public function assertCallSent(string $to): void
 	{
-		Assert::assertInstanceOf(MessageInstance::class, $this->history["sms_$to"] ?? null);
+		Assert::assertInstanceOf(CallInstance::class, $this->history->get("call_$to"));
 	}
-	
-	public function assertCallSent(string $to)
-	{
-		Assert::assertInstanceOf(CallInstance::class, $this->history["call_$to"] ?? null);
-	}
+
+    public function assertMessageNotSent(string $to): void
+    {
+        Assert::assertNull($this->history->get("sms_$to"));
+    }
+
+    public function assertCallNotSent(string $to): void
+    {
+        Assert::assertNull($this->history->get("call_$to"));
+    }
+
+    public function assertNothingSent(): void {
+        Assert::assertTrue($this->history->isEmpty());
+    }
+
+    public function assertNoMessagesSent(): void
+    {
+        Assert::assertEmpty(array_filter(array_keys($this->history->keys()->toArray()), function($key){
+            return substr($key, 0, 4) === "sms_";
+        }));
+    }
+
+    public function assertNoCallsSent(): void
+    {
+        Assert::assertEmpty(array_filter(array_keys($this->history->keys()->toArray()), function($key){
+            return substr($key, 0, 5) === "call_";
+        }));
+    }
 }

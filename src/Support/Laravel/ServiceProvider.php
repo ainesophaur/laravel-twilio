@@ -36,6 +36,14 @@ class ServiceProvider extends BaseServiceProvider
         $this->app->singleton(TwilioInterface::class, function() {
             return $this->app->make('twilio')->defaultConnection();
         });
+
+        $this->app->singleton(TwilioChannel::class, function(){
+            return new TwilioChannel(
+                $this->app->get(TwilioInterface::class),
+                $this->app['config']->get('twilio.twilio'),
+                $this->app['log']
+            );
+        });
     }
 
     /**
